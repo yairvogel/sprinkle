@@ -1,22 +1,28 @@
 from dataclasses import dataclass
-from typing import Iterable, Protocol, TypeVar, cast
+from typing import cast
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
+
+from utils import merge
 
 
 @dataclass
 class Chunk:
-    prompt: str
+    text: str
     start: int
     end: int
-    full: bool = False
 
-    @property
-    def text(self) -> str:
-        return self.prompt if self.full else self.prompt[self.start : self.end]
+    @staticmethod
+    def clip(text: str, start: int, end: int) -> "Chunk":
+        return Chunk(text[start:end], start, end)
 
-    def __le__(self, other):
-        return self.start <= other.start
+    @staticmethod
+    def window(text: str, start: int, end: int) -> "Chunk":
+        return Chunk(text, start, end)
+
+
+def chunk_comparer(a: Chunk, b: Chunk) -> int:
+    return b.start - a.start
 
 
 async def main(prompt: str):
@@ -49,16 +55,23 @@ You are a bash command generator AI. Your role is to convert natural language de
   5. **Portability**: Prefer POSIX-compatible commands when possible, use only gnu tools
 
   ## Examples
-  Input: "list all files in the current directory including hidden ones"
-  Output: `ls -la`
+  Input: list all files in the current directory including hidden ones
+  Output: ls -la
 
   Input: find all Python files larger than 1MB and sort by size
   Output: find . -name "*.py" -size +1M -exec ls -lh {{}} + | sort -k5 -h
 
+  Input: extract the id property from this json object list
+  Output: jq '.[].id'
+
+  Input: extract the number property from this json object list, and sum the result
+  Output: jq '.[].number | add'
+
   Input: create a backup of the config directory with timestamp
   Output: cp -r config config_backup_$(date +%Y%m%d_%H%M%S)
 
-  Input: ""
+  Input:
+  Output: 
 
   ## Command Chaining
   - Use `&&` for sequential execution with failure stops
@@ -86,64 +99,32 @@ You are a bash command generator AI. Your role is to convert natural language de
         end = prompt.find("}}", start)
         if end < 0:
             break
-        chunks.append(Chunk(prompt, start, end + 2))
+        chunks.append(Chunk.clip(prompt, start, end + 2))
         start = prompt.find("{{", end)
+
+    if not chunks:
+        return prompt
 
     texts: list[Chunk] = []
     if chunks[0].start > 0:
-        texts.append(Chunk(prompt, 0, chunks[0].start))
+        texts.append(Chunk.clip(prompt, 0, chunks[0].start))
     for p, n in zip(chunks, chunks[1:]):
-        texts.append(Chunk(prompt, p.end, n.start))
+        texts.append(Chunk.clip(prompt, p.end, n.start))
     if chunks[-1].end < len(prompt):
-        texts.append(Chunk(prompt, chunks[-1].end, len(prompt)))
+        texts.append(Chunk.clip(prompt, chunks[-1].end, len(prompt)))
 
     contents = []
 
     async def invoke(chunk: Chunk) -> Chunk:
-        print(f"hi {chunk.start}")
         out = await model.ainvoke({"chunk": chunk.text})
-        res = Chunk(cast(str, out.content), chunk.start, chunk.end, full=True)
-        print(f"bi {chunk.start}")
+        res = Chunk.window(cast(str, out.content), chunk.start, chunk.end)
         return res
 
-    contents = await asyncio.gather(*(invoke(c) for c in chunks))
+    contents = await asyncio.gather(*map(invoke, chunks))
 
-    out = merge(contents, texts)
-    print(" ".join(o.text for o in out))
-
-
-class Comparable(Protocol):
-    def __le__(self, other) -> bool: ...
-
-
-T = TypeVar("T", bound=Comparable)
-
-
-def merge(L: list[T], R: list[T]) -> Iterable[T]:
-    i = 0  # Initial index of first subarray
-    j = 0  # Initial index of second subarray
-    n1 = len(L)
-    n2 = len(R)
-
-    while i < n1 and j < n2:
-        if L[i] <= R[j]:
-            yield L[i]
-            i += 1
-        else:
-            yield R[j]
-            j += 1
-
-    # Copy the remaining elements of L[], if there
-    # are any
-    while i < n1:
-        yield L[i]
-        i += 1
-
-    # Copy the remaining elements of R[], if there
-    # are any
-    while j < n2:
-        yield R[j]
-        j += 1
+    out = merge(contents, texts, chunk_comparer)
+    out = " ".join(o.text for o in out)
+    os.execvp("bash", ["/usr/env/bash", "-c", out])
 
 
 if __name__ == "__main__":
@@ -158,6 +139,9 @@ if __name__ == "__main__":
         exit(1)
 
     argv = sys.argv
+    prompt = " ".join(argv[1:])
+    if len(prompt) == 0:
+        print("\033[91mno prompt was provided.\033[0", file=sys.stderr)
     import asyncio
 
-    asyncio.run(main(str.join(" ", argv[1:])))
+    asyncio.run(main(" ".join(argv[1:])))
