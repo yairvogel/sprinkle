@@ -1,31 +1,16 @@
-from dataclasses import dataclass
 from typing import cast
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 
 from utils import merge
-
-
-@dataclass
-class Chunk:
-    text: str
-    start: int
-    end: int
-
-    @staticmethod
-    def clip(text: str, start: int, end: int) -> "Chunk":
-        return Chunk(text[start:end], start, end)
-
-    @staticmethod
-    def window(text: str, start: int, end: int) -> "Chunk":
-        return Chunk(text, start, end)
+from parsing import Chunk, parse
 
 
 def chunk_comparer(a: Chunk, b: Chunk) -> int:
     return b.start - a.start
 
 
-async def main(prompt: str):
+async def main(prompt: str, verbose: bool):
     model = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         temperature=0,
@@ -93,43 +78,39 @@ You are a bash command generator AI. Your role is to convert natural language de
 
     model = template | model
 
-    chunks: list[Chunk] = []
-    start = prompt.find("{{")
-    while 0 <= start < len(prompt):
-        end = prompt.find("}}", start)
-        if end < 0:
-            break
-        chunks.append(Chunk.clip(prompt, start, end + 2))
-        start = prompt.find("{{", end)
-
-    if not chunks:
-        return prompt
-
-    texts: list[Chunk] = []
-    if chunks[0].start > 0:
-        texts.append(Chunk.clip(prompt, 0, chunks[0].start))
-    for p, n in zip(chunks, chunks[1:]):
-        texts.append(Chunk.clip(prompt, p.end, n.start))
-    if chunks[-1].end < len(prompt):
-        texts.append(Chunk.clip(prompt, chunks[-1].end, len(prompt)))
-
-    contents = []
+    chunks, texts = parse(prompt)
 
     async def invoke(chunk: Chunk) -> Chunk:
         out = await model.ainvoke({"chunk": chunk.text})
         res = Chunk.window(cast(str, out.content), chunk.start, chunk.end)
+        if verbose:
+            print(f"searching for {chunk.text}, got {res.text}")
         return res
 
     contents = await asyncio.gather(*map(invoke, chunks))
 
     out = merge(contents, texts, chunk_comparer)
     out = " ".join(o.text for o in out)
+    if verbose:
+        print(f"executing 'bash /usr/env/bash -c {out}")
     os.execvp("bash", ["/usr/env/bash", "-c", out])
 
 
 if __name__ == "__main__":
     import os
     import sys
+    import argparse
+    import asyncio
+
+    parser = argparse.ArgumentParser(description="AI-powered bash command generator")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="enable verbose output"
+    )
+    parser.add_argument(
+        "prompt", nargs="*", help="natural language description of the command"
+    )
+
+    args = parser.parse_args()
 
     if "GOOGLE_API_KEY" not in os.environ:
         print(
@@ -138,10 +119,12 @@ if __name__ == "__main__":
         )
         exit(1)
 
-    argv = sys.argv
-    prompt = " ".join(argv[1:])
+    prompt = " ".join(args.prompt)
     if len(prompt) == 0:
         print("\033[91mno prompt was provided.\033[0", file=sys.stderr)
-    import asyncio
+        exit(1)
 
-    asyncio.run(main(" ".join(argv[1:])))
+    if args.verbose:
+        print(f"Processing prompt: {prompt}", file=sys.stderr)
+
+    asyncio.run(main(prompt, args.verbose))
