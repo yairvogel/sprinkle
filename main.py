@@ -4,6 +4,7 @@ from langchain.prompts import ChatPromptTemplate
 
 from utils import merge
 from parsing import Chunk, parse
+from tui import Sprinkle
 
 
 def chunk_comparer(a: Chunk, b: Chunk) -> int:
@@ -93,7 +94,12 @@ You are a bash command generator AI. Your role is to convert natural language de
     out = " ".join(o.text for o in out)
     if verbose:
         print(f"executing 'bash /usr/env/bash -c {out}")
-    os.execvp("bash", ["/usr/env/bash", "-c", out])
+
+    def exec(text: str):
+        os.execvp("bash", ["/usr/env/bash", "-c", text])
+
+    app = Sprinkle(out, exec)
+    await app.run_async()
 
 
 if __name__ == "__main__":
