@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "sprinkle"
+name = "sprinkle-ai"
 version = "0.1.0"
 description = "AI-powered bash command generator that converts natural language descriptions into executable shell commands"
 authors = [{name = "Yair", email = "yair@example.com"}]
@@ -37,6 +37,9 @@ sprinkle = "sprinkle.main:cli"
 Homepage = "https://github.com/yair/sprinkle"
 Repository = "https://github.com/yair/sprinkle"
 Issues = "https://github.com/yair/sprinkle/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sprinkle"]
 
 [tool.pyright]
 venvPath = "."
