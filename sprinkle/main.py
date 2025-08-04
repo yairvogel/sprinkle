@@ -1,11 +1,7 @@
+import os
 from dataclasses import dataclass
 from typing import Callable, NoReturn, cast
-
-
-from inference import create_template
-from parsing import Chunk, parse
-from tui import Sprinkle
-from utils import merge
+from .parsing import Chunk, parse
 
 
 @dataclass
@@ -15,7 +11,16 @@ class Args:
     editor: bool
 
 
+def exec(text: str):
+    os.execvp("bash", ["/usr/env/bash", "-c", text])
+
+
 async def main(prompt: str, args: Args):
+    from .inference import create_template
+    from .tui import Sprinkle
+    from .utils import merge
+    import asyncio
+
     chunks, texts = parse(prompt)
 
     template = create_template()
@@ -24,7 +29,10 @@ async def main(prompt: str, args: Args):
         prompt_replaced = prompt.replace(chunk.text, "YOUR ANSWER IS HERE")
         out = await template.ainvoke({"chunk": chunk.text, "text": prompt_replaced})
         out = cast(str, out.content)
-        out = out.strip("\"'")
+        if out[:1] == "'" and out[-1:] == "'":
+            out = out[1:-1]
+        if out[:1] == '"' and out[-1:] == '"':
+            out = out[1:-1]
         res = Chunk.window(out, chunk.start, chunk.end)
         if args.verbose:
             print(f"searching for {chunk.text}, got {res.text}")
@@ -37,27 +45,25 @@ async def main(prompt: str, args: Args):
     if args.verbose:
         print(f"executing 'bash /usr/env/bash -c {out}")
 
-    def exec(text: str):
-        os.execvp("bash", ["/usr/env/bash", "-c", text])
-
     action = print if args.output else exec
 
     result = out
 
     if args.editor:
         app = Sprinkle(out, cast(Callable[[str, Sprinkle], NoReturn], action))
-        result = cast(str, await app.run_async())
+        result = cast(str | None, await app.run_async())
 
-    action(result)
+    if result is not None:
+        action(result)
 
 
 def chunk_comparer(a: Chunk, b: Chunk) -> int:
     return b.start - a.start
 
 
-if __name__ == "__main__":
+def cli():
+    """Command line interface for sprinkle."""
     import argparse
-    import asyncio
     import os
     import sys
 
@@ -96,4 +102,13 @@ if __name__ == "__main__":
     if args.verbose:
         print(f"Processing prompt: {prompt}", file=sys.stderr)
 
-    asyncio.run(main(prompt, cast(Args, args)))
+    if "{{" in prompt and "}}" in prompt:
+        import asyncio
+
+        asyncio.run(main(prompt, cast(Args, args)))
+    else:
+        exec(prompt)
+
+
+if __name__ == "__main__":
+    cli()

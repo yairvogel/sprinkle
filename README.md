@@ -8,13 +8,31 @@ Sprinkle is a Python-based command-line tool that leverages Google's Gemini AI t
 
 ## Installation
 
+### From PyPI (Recommended)
+
+```bash
+# Install with pip
+pip install sprinkle
+
+# Or install with pipx (recommended for CLI tools)
+pipx install sprinkle
+```
+
 ### Prerequisites
 
 - Python 3.12 or higher
-- UV package manager
 - Google Gemini API key
 
 ### Setup
+
+1. Set up your Google Gemini API key:
+```bash
+export GOOGLE_API_KEY="your-gemini-api-key-here"
+```
+
+### Development Installation
+
+If you want to contribute or modify the code:
 
 1. Clone the repository:
 ```bash
@@ -22,14 +40,9 @@ git clone <repository-url>
 cd sprinkle
 ```
 
-2. Set up your Google Gemini API key:
+2. Install in development mode:
 ```bash
-export GOOGLE_API_KEY="your-gemini-api-key-here"
-```
-
-3. Install dependencies using UV:
-```bash
-uv sync
+pip install -e .
 ```
 
 ## Usage
@@ -40,13 +53,13 @@ Convert natural language descriptions to bash commands:
 
 ```bash
 # Generate and execute a command
-uv run main.py "list all files in current directory"
+sprinkle "list all files in current directory"
 
 # Output command without executing (safe mode)
-uv run main.py -o "find all python files larger than 1kb"
+sprinkle -o "find all python files larger than 1kb"
 
 # Verbose output to see the AI reasoning process
-uv run main.py -v -o "count lines in all python files"
+sprinkle -v -o "count lines in all python files"
 ```
 
 ### Template-Based Commands
@@ -55,10 +68,10 @@ Use `{{}}` syntax for complex multi-step operations:
 
 ```bash
 # Generate compound commands with AI substitution
-uv run main.py -o "{{find all python files}} and {{count the lines}}"
+sprinkle -o "{{find all python files}} and {{count the lines}}"
 
 # More complex example
-uv run main.py -o "{{create backup directory}} then {{copy all config files to backup}}"
+sprinkle -o "{{create backup directory}} then {{copy all config files to backup}}"
 ```
 
 ### Interactive Editing
@@ -67,7 +80,7 @@ Use the editor mode to review and modify commands before execution:
 
 ```bash
 # Open interactive editor before execution
-uv run main.py -e "compress all log files older than 30 days"
+sprinkle -e "compress all log files older than 30 days"
 ```
 
 ### Command Line Options
@@ -82,37 +95,37 @@ uv run main.py -e "compress all log files older than 30 days"
 #### File Operations
 ```bash
 # List files with details
-uv run main.py -o "show detailed information about all files including hidden ones"
+sprinkle -o "show detailed information about all files including hidden ones"
 # Output: ls -la
 
 # Find and process files
-uv run main.py -o "find all JSON files and validate their syntax"
+sprinkle -o "find all JSON files and validate their syntax"
 # Output: find . -name "*.json" -exec python -m json.tool {} \; > /dev/null
 
 # Backup with timestamp
-uv run main.py -o "create a backup of the config directory with current timestamp"
+sprinkle -o "create a backup of the config directory with current timestamp"
 # Output: cp -r config config_backup_$(date +%Y%m%d_%H%M%S)
 ```
 
 #### System Administration
 ```bash
 # Process management
-uv run main.py -o "kill all processes containing the word nginx"
+sprinkle -o "kill all processes containing the word nginx"
 # Output: pkill -f nginx
 
 # Disk usage analysis
-uv run main.py -o "show disk usage of all directories sorted by size"
+sprinkle -o "show disk usage of all directories sorted by size"
 # Output: du -sh */ | sort -hr
 ```
 
 #### Template-Based Complex Operations
 ```bash
 # Multi-step file processing
-uv run main.py -o "{{find all log files older than 7 days}} and {{compress them with gzip}}"
+sprinkle -o "{{find all log files older than 7 days}} and {{compress them with gzip}}"
 # Output: find . -name "*.log" -mtime +7 and gzip
 
 # Conditional operations
-uv run main.py -o "{{check if docker is running}} and {{start nginx container if it exists}}"
+sprinkle -o "{{check if docker is running}} and {{start nginx container if it exists}}"
 # Output: systemctl is-active docker and docker start nginx 2>/dev/null || echo "nginx container not found"
 ```
 
